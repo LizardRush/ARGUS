@@ -1,7 +1,7 @@
 # ARGUS
 ### Advanced Reasoning & Geographic Understanding System
 
-> *Google Maps × Baritone — for Roblox.*
+> *Baritone — for Roblox.*
 
 ARGUS is the most advanced client-side navigation and pathfinding system for Roblox. It ignores `PathfindingService` entirely, builds its own navigation graph from live world geometry, finds routes with a custom A\* engine, and then physically drives your character using a technique-based movement system — all from a single executor script.
 
