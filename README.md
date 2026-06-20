@@ -100,19 +100,19 @@ New techniques can be added by registering any table with the five methods above
 ## Usage
 
 ### Executor (recommended)
-1. Copy the contents of [`Main.lua`](Main.lua).
-2. Paste into your executor and run.
+1. Copy the contents of [`exploit.lua`](exploit.lua).
+2. Paste into your executor and execute.
 
-ARGUS downloads all modules from this repository on first run (~3–5 seconds depending on connection).
+ARGUS fetches all 28 modules from this repository on first run (~3–5 s depending on connection speed). Subsequent re-runs reuse the in-memory cache, so they start instantly.
 
-Supported executors: **Synapse X**, **KRNL**, **Fluxus**, **Script-Ware**, **Delta**, **Hydrogen**, and any executor that exposes `syn.request`, `request()`, or allows `game:HttpGet`.
+Supported executors: **Synapse X** · **KRNL** · **Fluxus** · **Script-Ware** · **Delta** · **Hydrogen** — any executor exposing `syn.request`, `request()`, `http.request`, `http_request`, or `game:HttpGet`.
 
-> **To re-run without doubling up:** ARGUS calls `getgenv().ARGUS_STOP()` on re-execution, cleanly tearing down the previous instance before starting a new one.
+> **Re-running safely:** `exploit.lua` calls `getgenv().ARGUS_STOP()` at the top of every execution, cleanly destroying the previous instance (connections, visuals, scanner loop) before starting a new one. No doubling up.
 
 ### Roblox Studio (LocalScript mode)
-1. Place `Main.lua` as a **LocalScript** inside `StarterPlayerScripts`.
-2. Recreate the folder hierarchy under it (each file becomes a **ModuleScript** with the same name, inside matching **Folder** instances).
-3. Enable `HttpService` → `HttpEnabled = true` (needed for Rayfield).
+1. Place [`Main.lua`](Main.lua) as a **LocalScript** inside `StarterPlayerScripts`.
+2. Mirror the folder tree underneath it — each `.lua` file in this repo becomes a **ModuleScript** with the matching name, inside a **Folder** of the matching directory name.
+3. Enable **HttpService → HttpEnabled = true** (required for the Rayfield UI).
 4. Press **Play**.
 
 ---
