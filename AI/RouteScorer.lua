@@ -97,7 +97,7 @@ function RouteScorer:Rationale(scoreData, bias)
 		parts[#parts+1] = "complex movement required"
 	end
 	if scoreData.distance > 1.5 then
-		parts[#parts+1] = "detour route (+". .
+		parts[#parts+1] = "detour route (+" ..
 			string.format("%.0f%%", (scoreData.distance-1)*100) .. " longer)"
 	end
 	parts[#parts+1] = string.format("score=%.3f [bias:%s]", scoreData.total, bias or "balanced")
