@@ -225,7 +225,7 @@ function AIDecisionSystem:_requestPath()
 	end
 
 	-- Execute
-	self._ctrl:ExecutePath(best.path, true)
+	self._ctrl:ExecutePath(best.path, false)
 end
 
 -- ── Event handlers ────────────────────────────────────────────────────────────

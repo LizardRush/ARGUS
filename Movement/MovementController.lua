@@ -57,12 +57,12 @@ end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
 
-function MovementController:ExecutePath(rawPath, humanize)
+function MovementController:ExecutePath(rawPath)
 	self:Stop()
 	if not rawPath or not rawPath.nodes or #rawPath.nodes < 1 then return end
 
 	self._path      = rawPath
-	self._waypoints = self._smoother:Smooth(rawPath, humanize or false)
+	self._waypoints = self._smoother:Smooth(rawPath)
 	self._wpIndex   = 1
 	self._stuckCount = 0
 	self._paused    = false

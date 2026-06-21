@@ -46,7 +46,6 @@ local GapCross            = require(script.Movement.Techniques.GapCross)
 local StairClimb          = require(script.Movement.Techniques.StairClimb)
 local CornerCut           = require(script.Movement.Techniques.CornerCut)
 local JumpChain           = require(script.Movement.Techniques.JumpChain)
-local HumanizationSystem  = require(script.Humanization.HumanizationSystem)
 local RouteScorer         = require(script.AI.RouteScorer)
 local AIDecisionSystem    = require(script.AI.AIDecisionSystem)
 local VisualizationSystem = require(script.Visualization.VisualizationSystem)
@@ -78,8 +77,7 @@ function ARGUS.new(options)
 		cfg = setmetatable(options.config, { __index = Config })
 	end
 
-	local enableViz      = options.visualize ~= false
-	local enableHumanize = options.humanize  ~= false and IS_CLIENT
+	local enableViz = options.visualize ~= false
 
 	-- ── Instantiate systems ───────────────────────────────────────────────
 
@@ -107,12 +105,9 @@ function ARGUS.new(options)
 	local controller = MovementController.new(cfg, techDB, smoother, graph, obs)
 	controller:SetCharacter(character)
 
-	local humanizer = HumanizationSystem.new(cfg, controller)
-	humanizer:SetCharacter(character)
-
 	local scorer = RouteScorer.new(cfg)
 	local viz    = enableViz and VisualizationSystem.new(cfg, nil) or nil
-	local ai     = AIDecisionSystem.new(cfg, pf, scorer, obs, controller, graph, viz, humanizer)
+	local ai     = AIDecisionSystem.new(cfg, pf, scorer, obs, controller, graph, viz, nil)
 	ai:SetCharacter(character)
 
 	-- ── Wire graph → viz ──────────────────────────────────────────────────
@@ -124,7 +119,6 @@ function ARGUS.new(options)
 	-- ── Start systems ─────────────────────────────────────────────────────
 
 	if viz then viz:Initialize() end
-	if enableHumanize then humanizer:Start() end
 
 	-- ── Scan loop ─────────────────────────────────────────────────────────
 
@@ -153,7 +147,6 @@ function ARGUS.new(options)
 			newChar:WaitForChild("HumanoidRootPart", 10)
 			controller:Stop()
 			controller:SetCharacter(newChar)
-			humanizer:SetCharacter(newChar)
 			ai:Stop()
 			ai:SetCharacter(newChar)
 		end)
@@ -167,7 +160,6 @@ function ARGUS.new(options)
 	self._obs         = obs
 	self._graph       = graph
 	self._controller  = controller
-	self._humanizer   = humanizer
 	self._ai          = ai
 	self._viz         = viz
 	self._running     = _running
@@ -231,10 +223,6 @@ function ARGUS:SetVisualization(enabled)
 	end
 end
 
-function ARGUS:SetHumanization(enabled)
-	self._humanizer:SetEnabled(enabled)
-end
-
 -- ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 function ARGUS:Destroy()
@@ -242,7 +230,6 @@ function ARGUS:Destroy()
 	pcall(function() self._ai:Stop() end)
 	pcall(function() self._controller:Stop() end)
 	pcall(function() self._obs:Destroy() end)
-	pcall(function() self._humanizer:Stop() end)
 	for _, c in ipairs(self._connections) do
 		if c and c.Disconnect then pcall(c.Disconnect, c) end
 	end

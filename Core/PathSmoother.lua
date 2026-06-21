@@ -1,6 +1,5 @@
 -- GoogleMapsRBX/Core/PathSmoother.lua
--- Post-processes raw A* paths: string-pulling, Catmull-Rom spline,
--- and optional waypoint jitter for humanization.
+-- Post-processes raw A* paths: string-pulling and Catmull-Rom spline.
 -- ModuleScript: child of Core folder.
 
 local PathSmoother = {}
@@ -18,9 +17,8 @@ end
 -- ── Public API ────────────────────────────────────────────────────────────────
 
 -- Smooth a raw path ({nodes, edges}).
--- humanize: if true, applies jitter to waypoints.
 -- Returns a flat array of Vector3 waypoints.
-function PathSmoother:Smooth(path, humanize)
+function PathSmoother:Smooth(path)
 	if not path or not path.nodes or #path.nodes < 2 then
 		return path and path.nodes and
 			self:_extractPositions(path.nodes) or {}
@@ -41,19 +39,6 @@ function PathSmoother:Smooth(path, humanize)
 			end
 		end
 		if not changed then break end
-	end
-
-	-- Jitter for humanization (XZ only)
-	if humanize and self._cfg.MaxJitter > 0 then
-		local jitter = self._cfg.MaxJitter
-		for i = 2, #positions - 1 do  -- don't jitter start/end
-			local p = positions[i]
-			positions[i] = Vector3.new(
-				p.X + (math.random() * 2 - 1) * jitter,
-				p.Y,
-				p.Z + (math.random() * 2 - 1) * jitter
-			)
-		end
 	end
 
 	return positions
