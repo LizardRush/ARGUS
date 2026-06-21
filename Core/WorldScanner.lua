@@ -96,19 +96,21 @@ end
 -- ── Full scan ─────────────────────────────────────────────────────────────────
 
 function WorldScanner:_fullScan(origin)
-	local cfg     = self._cfg
-	local radius  = cfg.ScanRadius
-	local spacing = cfg.NodeSpacing
-	local steps   = math.ceil(radius / spacing)
+	local cfg      = self._cfg
+	local radius   = cfg.ScanRadius
+	local spacing  = cfg.NodeSpacing
+	local stepsXZ  = math.ceil(radius / spacing)
+	local stepsY   = math.ceil((cfg.ScanYRange or 16) / spacing)
 	local newNodes = {}
 	local count    = 0
 	local iter     = 0
-	-- Yield every 500 iterations (~40 yields vs the old 393 for a 50-stud radius).
-	local YIELD_MAIN = cfg.ScanYieldInterval or 500
+	local YIELD_MAIN = cfg.ScanYieldInterval or 1000
 
-	for xi = -steps, steps do
-		for yi = -steps, steps do
-			for zi = -steps, steps do
+	-- Cylinder scan: full XZ radius, limited Y range.
+	-- Old: 27³ = 19,683 iters. New (ScanYRange=16): 27 × 9 × 27 = 6,561 iters → 3× fewer probes.
+	for xi = -stepsXZ, stepsXZ do
+		for yi = -stepsY, stepsY do
+			for zi = -stepsXZ, stepsXZ do
 				iter = iter + 1
 				if iter % YIELD_MAIN == 0 then task.wait() end
 
@@ -116,8 +118,10 @@ function WorldScanner:_fullScan(origin)
 				local gy = origin.Y + yi * spacing
 				local gz = origin.Z + zi * spacing
 
-				local dx, dy, dz = gx - origin.X, gy - origin.Y, gz - origin.Z
-				if dx*dx + dy*dy + dz*dz > radius*radius then continue end
+				-- Cylinder cull: XZ only (Y is already bounded by stepsY loop).
+				local dx = gx - origin.X
+				local dz = gz - origin.Z
+				if dx*dx + dz*dz > radius*radius then continue end
 
 				local node = self:_probeFloor(gx, gy + spacing, gz)
 				if node then

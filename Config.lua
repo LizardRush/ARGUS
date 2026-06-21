@@ -6,9 +6,10 @@ local Config = {}
 
 -- ── Scanner ─────────────────────────────────────────────────────────────────
 Config.NodeSpacing        = 4      -- studs between navigation grid points
-Config.ScanRadius         = 50     -- studs around character to scan
+Config.ScanRadius         = 50     -- XZ scan radius in studs
+Config.ScanYRange         = 16     -- studs above/below character to probe (vertical range)
 Config.ScanInterval       = 0.25   -- seconds between full rescans
-Config.ScanYieldInterval  = 500    -- probe iterations between task.wait() yields
+Config.ScanYieldInterval  = 1000   -- probe iterations per task.wait() yield
 Config.ClearanceHeight    = 4.5    -- vertical clearance needed above a node
 Config.MinSurfaceNormal   = 0.7    -- Y-component threshold for walkable floor
 Config.RayMaxDistance     = 200    -- max raycast distance
