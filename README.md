@@ -109,12 +109,16 @@ New techniques can be added by registering any table with the five methods above
 ## Usage
 
 ### Executor (recommended)
-1. Copy the contents of [`exploit.lua`](exploit.lua).
-2. Paste into your executor and execute.
 
-ARGUS fetches all 28 modules from this repository on first run (~3–5 s depending on connection speed). Subsequent re-runs reuse the in-memory cache, so they start instantly.
+Paste this one-liner into your executor and run it:
 
-Supported executors: **Synapse X** · **KRNL** · **Fluxus** · **Script-Ware** · **Delta** · **Hydrogen** — any executor exposing `syn.request`, `request()`, `http.request`, `http_request`, or `game:HttpGet`.
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/LizardRush/ARGUS/main/exploit.lua?raw=true"))()
+```
+
+ARGUS fetches all modules from this repository on first run (~3–5 s depending on connection speed). Subsequent re-runs reuse the in-memory cache, so they start instantly.
+
+Supported executors: **Synapse X** · **KRNL** · **Fluxus** · **Script-Ware** · **Delta** · **Macsploit** · **Opiumware** — any executor exposing `syn.request`, `request()`, `http.request`, `http_request`, or `game:HttpGet`.
 
 > **Re-running safely:** `exploit.lua` calls `getgenv().ARGUS_STOP()` at the top of every execution, cleanly destroying the previous instance (connections, visuals, scanner loop) before starting a new one. No doubling up.
 
