@@ -10,14 +10,15 @@ WorldScanner.__index = WorldScanner
 
 function WorldScanner.new(config, observationSystem)
 	local self = setmetatable({}, WorldScanner)
-	self._cfg          = config
-	self._obs          = observationSystem
-	self._nodes        = {}      -- [hashKey] = NodeData
-	self._dirtyCells   = {}      -- [hashKey] = true
-	self._rayParams    = self:_buildRayParams()
-	self._scanTime     = 0       -- ms of last full scan
-	self._totalNodes   = 0
-	self.onScanComplete = nil     -- callback(nodeCount)
+	self._cfg             = config
+	self._obs             = observationSystem
+	self._nodes           = {}      -- [hashKey] = NodeData
+	self._dirtyCells      = {}      -- [hashKey] = true
+	self._specialDetected = {}      -- [hashKey] = true; skip re-detection on repeat scans
+	self._rayParams       = self:_buildRayParams()
+	self._scanTime        = 0       -- ms of last full scan
+	self._totalNodes      = 0
+	self.onScanComplete   = nil     -- callback(nodeCount)
 	return self
 end
 
@@ -102,22 +103,21 @@ function WorldScanner:_fullScan(origin)
 	local newNodes = {}
 	local count    = 0
 	local iter     = 0
+	-- Yield every 500 iterations (~40 yields vs the old 393 for a 50-stud radius).
+	local YIELD_MAIN = cfg.ScanYieldInterval or 500
 
 	for xi = -steps, steps do
 		for yi = -steps, steps do
 			for zi = -steps, steps do
 				iter = iter + 1
-				if iter % 50 == 0 then task.wait() end
+				if iter % YIELD_MAIN == 0 then task.wait() end
 
 				local gx = origin.X + xi * spacing
 				local gy = origin.Y + yi * spacing
 				local gz = origin.Z + zi * spacing
 
-				-- Sphere cull
 				local dx, dy, dz = gx - origin.X, gy - origin.Y, gz - origin.Z
-				if dx*dx + dy*dy + dz*dz > radius*radius then
-					continue
-				end
+				if dx*dx + dy*dy + dz*dz > radius*radius then continue end
 
 				local node = self:_probeFloor(gx, gy + spacing, gz)
 				if node then
@@ -131,15 +131,24 @@ function WorldScanner:_fullScan(origin)
 		end
 	end
 
-	-- Special detection pass
-	local passIter = 0
+	-- Special detection: skip nodes already tagged; only process newcomers.
+	-- On a steady-state scan (player barely moved) this is near-zero work.
+	local detected  = self._specialDetected
+	local passIter  = 0
 	for key, node in pairs(newNodes) do
-		passIter = passIter + 1
-		if passIter % 20 == 0 then task.wait() end
-		self:_specialDetect(node)
+		if not detected[key] then
+			passIter = passIter + 1
+			if passIter % 100 == 0 then task.wait() end
+			self:_specialDetect(node)
+			detected[key] = true
+		end
+	end
+	-- Prune cache entries that left the scan radius.
+	for key in pairs(detected) do
+		if not newNodes[key] then detected[key] = nil end
 	end
 
-	self._nodes     = newNodes
+	self._nodes      = newNodes
 	self._totalNodes = count
 end
 
@@ -151,21 +160,25 @@ function WorldScanner:_incrementalScan(origin)
 	local iter = 0
 	for key in pairs(dirty) do
 		iter = iter + 1
-		if iter % 20 == 0 then task.wait() end
-		-- Re-probe the cell centre
+		if iter % 200 == 0 then task.wait() end
 		local parts = string.split(key, ",")
-		local cx = tonumber(parts[1]) * self._cfg.NodeSpacing + self._cfg.NodeSpacing/2
-		local cy = tonumber(parts[2]) * self._cfg.NodeSpacing + self._cfg.NodeSpacing/2
-		local cz = tonumber(parts[3]) * self._cfg.NodeSpacing + self._cfg.NodeSpacing/2
-		local node = self:_probeFloor(cx, cy + self._cfg.NodeSpacing, cz)
+		local ns = self._cfg.NodeSpacing
+		local cx = tonumber(parts[1]) * ns + ns * 0.5
+		local cy = tonumber(parts[2]) * ns + ns * 0.5
+		local cz = tonumber(parts[3]) * ns + ns * 0.5
+		local node = self:_probeFloor(cx, cy + ns, cz)
 		if node then
 			self._nodes[key] = node
+			-- Re-detect: geometry changed so cached tags are stale.
+			self._specialDetected[key] = nil
 			self:_specialDetect(node)
+			self._specialDetected[key] = true
 		else
 			if self._nodes[key] then
 				self._nodes[key] = nil
 				self._totalNodes = self._totalNodes - 1
 			end
+			self._specialDetected[key] = nil
 		end
 	end
 end

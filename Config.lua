@@ -5,13 +5,14 @@
 local Config = {}
 
 -- ── Scanner ─────────────────────────────────────────────────────────────────
-Config.NodeSpacing       = 4      -- studs between navigation grid points
-Config.ScanRadius        = 50     -- studs around character to scan
-Config.ScanInterval      = 0.5    -- seconds between full rescans
-Config.ClearanceHeight   = 4.5    -- vertical clearance needed above a node
-Config.MinSurfaceNormal  = 0.7    -- Y-component threshold for walkable floor
-Config.RayMaxDistance    = 200    -- max raycast distance
-Config.SpecialScanRadius = 3      -- radius for per-node special-detection pass
+Config.NodeSpacing        = 4      -- studs between navigation grid points
+Config.ScanRadius         = 50     -- studs around character to scan
+Config.ScanInterval       = 0.25   -- seconds between full rescans
+Config.ScanYieldInterval  = 500    -- probe iterations between task.wait() yields
+Config.ClearanceHeight    = 4.5    -- vertical clearance needed above a node
+Config.MinSurfaceNormal   = 0.7    -- Y-component threshold for walkable floor
+Config.RayMaxDistance     = 200    -- max raycast distance
+Config.SpecialScanRadius  = 3      -- radius for per-node special-detection pass
 
 -- ── Pathfinding ──────────────────────────────────────────────────────────────
 Config.MaxJumpHeight     = 8      -- studs, max upward jump
