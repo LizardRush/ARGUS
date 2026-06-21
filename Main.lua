@@ -166,7 +166,9 @@ function ARGUS.new(options)
 
 	local self        = setmetatable({}, ARGUS)
 	self._cfg         = cfg
+	self._techDB      = techDB
 	self._obs         = obs
+	self._scanner     = scanner
 	self._graph       = graph
 	self._controller  = controller
 	self._ai          = ai
@@ -205,6 +207,32 @@ end
 
 function ARGUS:Recalculate()
 	self._ai:RecalculatePath()
+end
+
+-- Load a ModuleScript addon. The module must return a function(systems).
+-- Call after ARGUS.new() to register custom techniques or hook events.
+function ARGUS:AddAddon(moduleScript)
+	local ok, addon = pcall(require, moduleScript)
+	if not ok then
+		warn("ARGUS: Addon load failed:", addon)
+		return
+	end
+	if type(addon) ~= "function" then
+		warn("ARGUS: Addon must return a function, got:", type(addon))
+		return
+	end
+	local systems = {
+		config     = self._cfg,
+		techDB     = self._techDB,
+		scanner    = self._scanner,
+		graph      = self._graph,
+		obs        = self._obs,
+		controller = self._controller,
+		ai         = self._ai,
+		viz        = self._viz,
+	}
+	local ok2, err = pcall(addon, systems)
+	if not ok2 then warn("ARGUS: Addon runtime error:", err) end
 end
 
 -- ── Inspection API ────────────────────────────────────────────────────────────
