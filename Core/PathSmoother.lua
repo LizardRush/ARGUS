@@ -107,7 +107,8 @@ end
 
 function PathSmoother:_buildRayParams()
 	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterType        = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true   -- non-collidable parts don't block sight lines
 	local excludes = {}
 	local vizFolder = workspace:FindFirstChild("ARGUS_Viz")
 	if vizFolder then excludes[#excludes+1] = vizFolder end

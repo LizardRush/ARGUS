@@ -317,12 +317,11 @@ end
 
 function WorldScanner:_buildRayParams()
 	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterType         = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide  = true   -- ignore non-collidable parts as surfaces
 	local excludes = {}
-	-- Exclude viz folder
 	local vizFolder = workspace:FindFirstChild("ARGUS_Viz")
 	if vizFolder then excludes[#excludes+1] = vizFolder end
-	-- Exclude character
 	if self._character then excludes[#excludes+1] = self._character end
 	params.FilterDescendantsInstances = excludes
 	return params
