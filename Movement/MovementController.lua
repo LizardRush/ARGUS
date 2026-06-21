@@ -47,7 +47,12 @@ function MovementController.new(config, techDB, smoother, graph, observationSyst
 	self.onReplan        = nil   -- function()
 
 	self._heartbeatConn = nil
+	self._char          = nil   -- injected via SetCharacter()
 	return self
+end
+
+function MovementController:SetCharacter(char)
+	self._char = char
 end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
@@ -128,7 +133,7 @@ function MovementController:_tick(dt)
 	if self._stopping then return end
 	if self._paused   then return end
 
-	local character = Players.LocalPlayer.Character
+	local character = self._char
 	if not character then return end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root     = character:FindFirstChild("HumanoidRootPart")

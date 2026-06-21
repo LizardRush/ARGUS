@@ -5,7 +5,6 @@
 
 local RunService    = game:GetService("RunService")
 local TweenService  = game:GetService("TweenService")
-local Players       = game:GetService("Players")
 
 local HumanizationSystem = {}
 HumanizationSystem.__index = HumanizationSystem
@@ -27,7 +26,13 @@ function HumanizationSystem.new(config, movementController)
 
 	self._conn        = nil
 	self._currentPath = nil  -- flat Vector3 array
+	self._char        = nil  -- injected via SetCharacter()
+	self._isClient    = RunService:IsClient()
 	return self
+end
+
+function HumanizationSystem:SetCharacter(char)
+	self._char = char
 end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
@@ -60,14 +65,14 @@ end
 -- ── Private tick ─────────────────────────────────────────────────────────────
 
 function HumanizationSystem:_tick(dt)
-	local character = Players.LocalPlayer.Character
+	local character = self._char
 	if not character then return end
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
-	local cam  = workspace.CurrentCamera
 
 	-- ── Camera follow ──────────────────────────────────────────────────────
-	if self._camera and self._currentPath and self._ctrl:IsActive() then
+	if self._isClient and self._camera and self._currentPath and self._ctrl:IsActive() then
+		local cam     = workspace.CurrentCamera
 		local wpIdx   = math.min(
 			self._ctrl:GetWaypointIndex() + 2,
 			self._ctrl:GetWaypointCount()

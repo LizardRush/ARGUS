@@ -55,7 +55,12 @@ function AIDecisionSystem.new(config, pathfinder, scorer, obs, controller, graph
 	end
 
 	self._followConn = nil
+	self._char       = nil   -- injected via SetCharacter()
 	return self
+end
+
+function AIDecisionSystem:SetCharacter(char)
+	self._char = char
 end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
@@ -165,7 +170,7 @@ function AIDecisionSystem:_requestPath()
 	if now - self._lastReplan < self._cfg.ReplanCooldown then return end
 	self._lastReplan = now
 
-	local character = Players.LocalPlayer.Character
+	local character = self._char
 	if not character then return end
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end

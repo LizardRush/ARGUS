@@ -1,30 +1,29 @@
 -- ARGUS/Main.lua
--- Roblox Studio entry point (LocalScript in StarterPlayerScripts).
--- All siblings must be ModuleScripts matching the folder tree:
+-- ModuleScript — works on both server and client.
 --
---   Main (LocalScript)
---   ├── Config
---   ├── Core/            ObservationSystem · WorldScanner · NavigationGraph
---   │                    AStarPathfinder · PathSmoother
---   ├── Movement/        MovementTechDB · MovementController
---   │   └── Techniques/  Walk · Jump · ClimbLadder · ClimbTruss · Swim
---   │                    RideElevator · RideConveyor · RidePlatform
---   │                    SafeFall · GapCross · StairClimb · CornerCut · JumpChain
---   ├── AI/              RouteScorer · AIDecisionSystem
---   ├── Humanization/    HumanizationSystem
---   ├── Visualization/   VisualizationSystem · MinimapPanel
---   ├── UI/              UISystem
---   └── Debug/           DebugPanel
+-- Client usage (LocalScript or ModuleScript required from a LocalScript):
+--   local ARGUS = require(script.Parent.ARGUS)
+--   local nav   = ARGUS.new()
+--   nav:GoToPosition(Vector3.new(100, 0, 200))
+--
+-- Server usage (Script or ModuleScript required from a Script):
+--   local ARGUS     = require(game.ServerScriptService.ARGUS)
+--   local character = workspace:FindFirstChild("SomeNPC")
+--   local nav       = ARGUS.new({ character = character })
+--   nav:GoToPosition(Vector3.new(100, 0, 200))
+--
+-- options (all optional on client; character required on server):
+--   character : Model   -- the character/NPC to navigate
+--   config    : table   -- partial Config overrides merged on top of defaults
+--   visualize : bool    -- enable 3D beam visualization (default true)
+--   humanize  : bool    -- enable humanization layer (default true on client)
 
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local player    = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-character:WaitForChild("HumanoidRootPart")
-character:WaitForChild("Humanoid")
+local IS_CLIENT = RunService:IsClient()
 
--- ── Load modules via Roblox require() ────────────────────────────────────────
+-- ── Load modules ──────────────────────────────────────────────────────────────
 
 local Config              = require(script.Config)
 local ObservationSystem   = require(script.Core.ObservationSystem)
@@ -50,137 +49,205 @@ local JumpChain           = require(script.Movement.Techniques.JumpChain)
 local HumanizationSystem  = require(script.Humanization.HumanizationSystem)
 local RouteScorer         = require(script.AI.RouteScorer)
 local AIDecisionSystem    = require(script.AI.AIDecisionSystem)
-local MinimapPanel        = require(script.Visualization.MinimapPanel)
 local VisualizationSystem = require(script.Visualization.VisualizationSystem)
-local DebugPanel          = require(script.Debug.DebugPanel)
-local UISystem            = require(script.UI.UISystem)
 
--- ── Shared state table ────────────────────────────────────────────────────────
+-- ── ARGUS class ───────────────────────────────────────────────────────────────
 
-local StateTable = {
-	currentAction = "Idle", currentNodeId = nil, nextNodeId = nil,
-	waypointIndex = 0, waypointTotal = 0, replanCount = 0,
-	routeScore = nil, nodeCount = 0, edgeCount = 0,
-	scanTimeMs = 0, astarIterations = 0, fps = 60,
-	trackedObjects = 0, rationale = "", forceRescan = false,
-}
+local ARGUS = {}
+ARGUS.__index = ARGUS
 
--- ── Instantiate systems ───────────────────────────────────────────────────────
+function ARGUS.new(options)
+	options = options or {}
 
-local obs      = ObservationSystem.new(Config)
-local scanner  = WorldScanner.new(Config, obs)
-local graph    = NavigationGraph.new(Config, obs)
-local pf       = AStarPathfinder.new(Config, graph)
-local smoother = PathSmoother.new(Config)
-local techDB   = MovementTechDB.new(Config)
-
-techDB:Register("JumpChain",    JumpChain.new())
-techDB:Register("CornerCut",    CornerCut.new())
-techDB:Register("GapCross",     GapCross.new())
-techDB:Register("RidePlatform", RidePlatform.new())
-techDB:Register("RideElevator", RideElevator.new())
-techDB:Register("RideConveyor", RideConveyor.new())
-techDB:Register("ClimbLadder",  ClimbLadder.new())
-techDB:Register("ClimbTruss",   ClimbTruss.new())
-techDB:Register("StairClimb",   StairClimb.new())
-techDB:Register("SafeFall",     SafeFall.new())
-techDB:Register("Swim",         Swim.new())
-techDB:Register("Jump",         Jump.new())
-techDB:Register("Walk",         Walk.new())
-
-local controller  = MovementController.new(Config, techDB, smoother, graph, obs)
-local humanizer   = HumanizationSystem.new(Config, controller)
-local scorer      = RouteScorer.new(Config)
-local minimap     = MinimapPanel.new(Config)
-local viz         = VisualizationSystem.new(Config, minimap)
-local debugPanel  = DebugPanel.new(Config, StateTable)
-local ai          = AIDecisionSystem.new(Config, pf, scorer, obs, controller, graph, viz, humanizer)
-local ui          = UISystem.new(Config, ai, controller, viz, humanizer, obs, debugPanel, StateTable)
-
--- ── Wire events ───────────────────────────────────────────────────────────────
-
-scanner.onScanComplete = function(n)
-	StateTable.nodeCount  = n
-	StateTable.scanTimeMs = scanner:GetScanTime()
-end
-
-graph.onChanged = function()
-	StateTable.nodeCount = graph.nodeCount
-	StateTable.edgeCount = graph.edgeCount
-	minimap:SetNodes(graph:GetAllNodes())
-	viz:UpdateNodes(graph:GetAllNodes())
-end
-
-controller.onSegmentFailed = function(idx, tech)
-	StateTable.replanCount = StateTable.replanCount + 1
-	debugPanel:AddLog(("Segment %d failed [%s]"):format(idx, tech))
-end
-controller.onArrived = function()
-	StateTable.currentAction = "Arrived"
-	debugPanel:AddLog("Navigation complete.")
-end
-controller.onStuck = function()
-	StateTable.currentAction = "Stuck"
-	debugPanel:AddLog("Stuck – replanning")
-end
-
-ai.onRouteSelected = function(path, scores, rationale)
-	StateTable.routeScore    = scores and scores.total
-	StateTable.rationale     = rationale or ""
-	StateTable.waypointTotal = path and path.nodes and #path.nodes or 0
-	StateTable.replanCount   = ai:GetReplanCount()
-	debugPanel:AddLog(("Route: %s"):format(rationale or "—"))
-end
-ai.onNavigationDone = function() StateTable.currentAction = "Arrived" end
-ai.onNavigationFail = function()
-	StateTable.currentAction = "No path found"
-	debugPanel:AddLog("WARNING: No path found.")
-end
-
--- ── Start systems ─────────────────────────────────────────────────────────────
-
-viz:Initialize()
-minimap:Initialize()
-humanizer:Start()
-
-task.spawn(function()
-	while true do
-		local root = character:FindFirstChild("HumanoidRootPart")
-		if root then
-			if StateTable.forceRescan then StateTable.forceRescan = false end
-			scanner:ScanAround(root.Position, character)
-			task.wait(Config.ScanInterval)
-			graph:IngestNodes(scanner:GetNodes())
-		else
-			task.wait(1)
-		end
+	-- Resolve character
+	local character
+	if options.character then
+		character = options.character
+	elseif IS_CLIENT then
+		local player = Players.LocalPlayer
+		character = player.Character or player.CharacterAdded:Wait()
+	else
+		error("ARGUS.new: options.character is required when running on the server", 2)
 	end
-end)
+	character:WaitForChild("HumanoidRootPart", 15)
+	character:WaitForChild("Humanoid", 15)
 
-local fpsBuffer = {}
-RunService.Heartbeat:Connect(function(dt)
-	fpsBuffer[#fpsBuffer + 1] = 1 / math.max(0.001, dt)
-	if #fpsBuffer > 30 then table.remove(fpsBuffer, 1) end
-	local s = 0; for _, v in ipairs(fpsBuffer) do s = s + v end
-	StateTable.fps             = s / #fpsBuffer
-	StateTable.waypointIndex   = controller:GetWaypointIndex()
-	StateTable.currentAction   = controller:GetCurrentAction()
-	StateTable.astarIterations = pf.lastIterations
-	StateTable.trackedObjects  = #obs:GetTrackedObjects()
-	local c = player.Character
-	if c and c ~= character then character = c end
-end)
+	-- Merge config overrides
+	local cfg = Config
+	if options.config then
+		cfg = setmetatable(options.config, { __index = Config })
+	end
 
-player.CharacterAdded:Connect(function(newChar)
-	character = newChar
-	newChar:WaitForChild("HumanoidRootPart", 10)
-	controller:Stop()
-	ai:Stop()
-	StateTable.currentAction = "Idle"
-	debugPanel:AddLog("Respawned.")
-end)
+	local enableViz      = options.visualize ~= false
+	local enableHumanize = options.humanize  ~= false and IS_CLIENT
 
-task.wait(2)
-ui:Initialize()
+	-- ── Instantiate systems ───────────────────────────────────────────────
 
-print(("[ARGUS] Studio ready — %d nodes."):format(graph.nodeCount))
+	local obs      = ObservationSystem.new(cfg)
+	local scanner  = WorldScanner.new(cfg, obs)
+	local graph    = NavigationGraph.new(cfg, obs)
+	local pf       = AStarPathfinder.new(cfg, graph)
+	local smoother = PathSmoother.new(cfg)
+	local techDB   = MovementTechDB.new(cfg)
+
+	techDB:Register("JumpChain",    JumpChain.new())
+	techDB:Register("CornerCut",    CornerCut.new())
+	techDB:Register("GapCross",     GapCross.new())
+	techDB:Register("RidePlatform", RidePlatform.new())
+	techDB:Register("RideElevator", RideElevator.new())
+	techDB:Register("RideConveyor", RideConveyor.new())
+	techDB:Register("ClimbLadder",  ClimbLadder.new())
+	techDB:Register("ClimbTruss",   ClimbTruss.new())
+	techDB:Register("StairClimb",   StairClimb.new())
+	techDB:Register("SafeFall",     SafeFall.new())
+	techDB:Register("Swim",         Swim.new())
+	techDB:Register("Jump",         Jump.new())
+	techDB:Register("Walk",         Walk.new())
+
+	local controller = MovementController.new(cfg, techDB, smoother, graph, obs)
+	controller:SetCharacter(character)
+
+	local humanizer = HumanizationSystem.new(cfg, controller)
+	humanizer:SetCharacter(character)
+
+	local scorer = RouteScorer.new(cfg)
+	local viz    = enableViz and VisualizationSystem.new(cfg, nil) or nil
+	local ai     = AIDecisionSystem.new(cfg, pf, scorer, obs, controller, graph, viz, humanizer)
+	ai:SetCharacter(character)
+
+	-- ── Wire graph → viz ──────────────────────────────────────────────────
+
+	graph.onChanged = function()
+		if viz then viz:UpdateNodes(graph:GetAllNodes()) end
+	end
+
+	-- ── Start systems ─────────────────────────────────────────────────────
+
+	if viz then viz:Initialize() end
+	if enableHumanize then humanizer:Start() end
+
+	-- ── Scan loop ─────────────────────────────────────────────────────────
+
+	local _running     = true
+	local _connections = {}
+
+	task.spawn(function()
+		while _running do
+			local root = character:FindFirstChild("HumanoidRootPart")
+			if root then
+				scanner:ScanAround(root.Position, character)
+				task.wait(cfg.ScanInterval)
+				graph:IngestNodes(scanner:GetNodes())
+			else
+				task.wait(1)
+			end
+		end
+	end)
+
+	-- ── Respawn handling (client only) ────────────────────────────────────
+
+	if IS_CLIENT then
+		local player = Players.LocalPlayer
+		local conn = player.CharacterAdded:Connect(function(newChar)
+			character = newChar
+			newChar:WaitForChild("HumanoidRootPart", 10)
+			controller:Stop()
+			controller:SetCharacter(newChar)
+			humanizer:SetCharacter(newChar)
+			ai:Stop()
+			ai:SetCharacter(newChar)
+		end)
+		_connections[#_connections + 1] = conn
+	end
+
+	-- ── Build instance ────────────────────────────────────────────────────
+
+	local self        = setmetatable({}, ARGUS)
+	self._cfg         = cfg
+	self._obs         = obs
+	self._graph       = graph
+	self._controller  = controller
+	self._humanizer   = humanizer
+	self._ai          = ai
+	self._viz         = viz
+	self._running     = _running
+	self._connections = _connections
+
+	return self
+end
+
+-- ── Navigation API ────────────────────────────────────────────────────────────
+
+function ARGUS:GoToPosition(position)
+	self._ai:GoToPosition(position)
+end
+
+function ARGUS:GoToPart(partOrName)
+	self._ai:GoToPart(partOrName)
+end
+
+function ARGUS:FollowPlayer(playerOrName)
+	self._ai:FollowPlayer(playerOrName)
+end
+
+function ARGUS:Stop()
+	self._ai:Stop()
+end
+
+function ARGUS:Pause()
+	self._ai:Pause()
+end
+
+function ARGUS:Resume()
+	self._ai:Resume()
+end
+
+function ARGUS:Recalculate()
+	self._ai:RecalculatePath()
+end
+
+-- ── Inspection API ────────────────────────────────────────────────────────────
+
+function ARGUS:GetState()
+	return {
+		action         = self._controller:GetCurrentAction(),
+		waypointIndex  = self._controller:GetWaypointIndex(),
+		waypointTotal  = self._controller:GetWaypointCount(),
+		nodeCount      = self._graph.nodeCount,
+		edgeCount      = self._graph.edgeCount,
+		replanCount    = self._ai:GetReplanCount(),
+		routeScore     = self._ai:GetCurrentScores(),
+		rationale      = self._ai:GetRationale(),
+		trackedObjects = #self._obs:GetTrackedObjects(),
+	}
+end
+
+-- ── Config API ────────────────────────────────────────────────────────────────
+
+function ARGUS:SetVisualization(enabled)
+	if not self._viz then return end
+	for _, layer in ipairs({ "Walk","Jump","Climb","Advanced","Platform","Conveyor","Fall" }) do
+		self._viz:SetLayerVisible(layer, enabled)
+	end
+end
+
+function ARGUS:SetHumanization(enabled)
+	self._humanizer:SetEnabled(enabled)
+end
+
+-- ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+function ARGUS:Destroy()
+	self._running = false
+	pcall(function() self._ai:Stop() end)
+	pcall(function() self._controller:Stop() end)
+	pcall(function() self._obs:Destroy() end)
+	pcall(function() self._humanizer:Stop() end)
+	for _, c in ipairs(self._connections) do
+		if c and c.Disconnect then pcall(c.Disconnect, c) end
+	end
+	local f = workspace:FindFirstChild("ARGUS_Viz")
+	if f then f:Destroy() end
+end
+
+return ARGUS
