@@ -7,9 +7,10 @@ local Config = {}
 -- ── Scanner ─────────────────────────────────────────────────────────────────
 Config.NodeSpacing        = 4      -- studs between navigation grid points
 Config.ScanRadius         = 50     -- XZ scan radius in studs
-Config.ScanYRange         = 16     -- studs above/below character to probe (vertical range)
+Config.ScanYRange         = 16     -- studs above/below character to probe vertically
+Config.MaxFloorsPerColumn = 3      -- max floors to pierce per XZ column
 Config.ScanInterval       = 0.25   -- seconds between full rescans
-Config.ScanYieldInterval  = 1000   -- probe iterations per task.wait() yield
+Config.ScanBudgetMs       = 10     -- ms per heartbeat frame allowed for scanning
 Config.ClearanceHeight    = 4.5    -- vertical clearance needed above a node
 Config.MinSurfaceNormal   = 0.7    -- Y-component threshold for walkable floor
 Config.RayMaxDistance     = 200    -- max raycast distance

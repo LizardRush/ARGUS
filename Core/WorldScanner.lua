@@ -96,75 +96,111 @@ end
 -- ── Full scan ─────────────────────────────────────────────────────────────────
 
 function WorldScanner:_fullScan(origin)
-	local cfg      = self._cfg
-	local radius   = cfg.ScanRadius
-	local spacing  = cfg.NodeSpacing
-	local stepsXZ  = math.ceil(radius / spacing)
-	local stepsY   = math.ceil((cfg.ScanYRange or 16) / spacing)
+	local cfg        = self._cfg
+	local radius     = cfg.ScanRadius
+	local spacing    = cfg.NodeSpacing
+	local stepsXZ    = math.ceil(radius / spacing)
+	local yRange     = cfg.ScanYRange or 16
+	local BUDGET     = (cfg.ScanBudgetMs or 10) * 0.001
+	local MAX_FLOORS = cfg.MaxFloorsPerColumn or 3
+	local minNorm    = cfg.MinSurfaceNormal
+	local clearH     = cfg.ClearanceHeight
+	local r2         = radius * radius
+
 	local newNodes = {}
 	local count    = 0
-	local iter     = 0
-	local YIELD_MAIN = cfg.ScanYieldInterval or 1000
+	local t0       = tick()
+	local colN     = 0
 
-	-- Cylinder scan: full XZ radius, limited Y range.
-	-- Old: 27³ = 19,683 iters. New (ScanYRange=16): 27 × 9 × 27 = 6,561 iters → 3× fewer probes.
+	-- Column-pierce scan: one XZ loop + downward pierce per column.
+	-- Single-floor map: 729 raycasts vs old 19,683 (27× fewer).
+	-- Multi-floor map: up to MAX_FLOORS raycasts per column; still finds every level.
 	for xi = -stepsXZ, stepsXZ do
-		for yi = -stepsY, stepsY do
-			for zi = -stepsXZ, stepsXZ do
-				iter = iter + 1
-				if iter % YIELD_MAIN == 0 then task.wait() end
+		for zi = -stepsXZ, stepsXZ do
+			local gx = origin.X + xi * spacing
+			local gz = origin.Z + zi * spacing
+			local dx, dz = gx - origin.X, gz - origin.Z
+			if dx*dx + dz*dz > r2 then continue end
 
-				local gx = origin.X + xi * spacing
-				local gy = origin.Y + yi * spacing
-				local gz = origin.Z + zi * spacing
+			-- Pierce downward, collecting walkable surfaces until MAX_FLOORS or bottom.
+			local probeY = origin.Y + yRange + spacing
+			local minY   = origin.Y - yRange - spacing
+			local found  = 0
 
-				-- Cylinder cull: XZ only (Y is already bounded by stepsY loop).
-				local dx = gx - origin.X
-				local dz = gz - origin.Z
-				if dx*dx + dz*dz > radius*radius then continue end
+			while probeY > minY and found < MAX_FLOORS do
+				local result = workspace:Raycast(
+					Vector3.new(gx, probeY, gz),
+					Vector3.new(0, minY - probeY, 0),
+					self._rayParams
+				)
+				if not result then break end
 
-				local node = self:_probeFloor(gx, gy + spacing, gz)
-				if node then
-					local key = self:_hashVec(node.position)
-					if not newNodes[key] then
-						newNodes[key] = node
-						count = count + 1
+				if result.Normal.Y >= minNorm then
+					local hp = result.Position
+					local cl = workspace:Raycast(
+						hp + Vector3.new(0, 0.1, 0),
+						Vector3.new(0, clearH, 0),
+						self._rayParams
+					)
+					if not cl then
+						local node = { position = hp, normal = result.Normal, part = result.Instance, tags = {} }
+						local key  = self:_hashVec(node.position)
+						if not newNodes[key] then
+							newNodes[key] = node
+							count  = count + 1
+							found  = found + 1
+						end
 					end
 				end
+				probeY = result.Position.Y - spacing
+			end
+
+			-- Time-budget yield: check every 50 columns to amortise tick() overhead.
+			-- On fast hardware this never triggers → zero-yield scan in one frame.
+			colN = colN + 1
+			if colN % 50 == 0 and tick() - t0 > BUDGET then
+				task.wait()
+				t0 = tick()
 			end
 		end
 	end
 
-	-- Special detection: skip nodes already tagged; only process newcomers.
-	-- On a steady-state scan (player barely moved) this is near-zero work.
-	local detected  = self._specialDetected
-	local passIter  = 0
+	-- Special detection: only untagged nodes; cached across scans.
+	local detected = self._specialDetected
+	local passN    = 0
 	for key, node in pairs(newNodes) do
 		if not detected[key] then
-			passIter = passIter + 1
-			if passIter % 100 == 0 then task.wait() end
 			self:_specialDetect(node)
 			detected[key] = true
+			passN = passN + 1
+			if passN % 10 == 0 and tick() - t0 > BUDGET then
+				task.wait()
+				t0 = tick()
+			end
 		end
 	end
-	-- Prune cache entries that left the scan radius.
 	for key in pairs(detected) do
 		if not newNodes[key] then detected[key] = nil end
 	end
 
-	self._nodes      = newNodes
+	self._nodes     = newNodes
 	self._totalNodes = count
 end
 
 -- ── Incremental scan ──────────────────────────────────────────────────────────
 
 function WorldScanner:_incrementalScan(origin)
-	local dirty = self._dirtyCells
+	local dirty  = self._dirtyCells
 	self._dirtyCells = {}
-	local iter = 0
+	local BUDGET = (self._cfg.ScanBudgetMs or 10) * 0.001
+	local t0     = tick()
+	local iter   = 0
 	for key in pairs(dirty) do
 		iter = iter + 1
-		if iter % 200 == 0 then task.wait() end
+		if iter % 20 == 0 and tick() - t0 > BUDGET then
+			task.wait()
+			t0 = tick()
+		end
 		local parts = string.split(key, ",")
 		local ns = self._cfg.NodeSpacing
 		local cx = tonumber(parts[1]) * ns + ns * 0.5
