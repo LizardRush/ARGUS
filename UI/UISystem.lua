@@ -445,4 +445,11 @@ function UISystem:_buildSettingsTab(window)
 	})
 end
 
+function UISystem:Notify(title, description, time)
+	if not self._lib then return end
+	pcall(function()
+		self._lib:Notify({ Title = title, Description = description, Time = time or 3 })
+	end)
+end
+
 return UISystem
