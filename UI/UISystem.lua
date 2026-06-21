@@ -389,21 +389,28 @@ function UISystem:_buildSettingsTab(window)
 	-- Left: keybinds (executor-only; _keybinds is nil in Studio)
 	local bindBox = tab:AddLeftGroupbox("Keybinds")
 	if self._keybinds then
-		bindBox:AddKeybind("FreecamKey", {
-			Text     = "Freecam",
-			Default  = self._keybinds.freecam  or Enum.KeyCode.G,
-			Callback = function(val)
-				self._keybinds.freecam = val
-			end,
-		})
-		bindBox:AddKeybind("ToggleUIKey", {
-			Text     = "Toggle UI",
-			Default  = self._keybinds.toggleUI or Enum.KeyCode.RightControl,
-			Callback = function(val)
-				self._keybinds.toggleUI = val
-				lib:Notify({ Title = "Settings", Description = "UI toggle key saved — takes effect next launch.", Time = 3 })
-			end,
-		})
+		local kb = self._keybinds
+		-- AddKeybind is not present in all Obsidian builds; fall back to labels
+		local hasKeybind = type(bindBox.AddKeybind) == "function"
+		if hasKeybind then
+			bindBox:AddKeybind("FreecamKey", {
+				Text     = "Freecam",
+				Default  = kb.freecam  or Enum.KeyCode.G,
+				Callback = function(val) kb.freecam = val end,
+			})
+			bindBox:AddKeybind("ToggleUIKey", {
+				Text     = "Toggle UI",
+				Default  = kb.toggleUI or Enum.KeyCode.RightControl,
+				Callback = function(val)
+					kb.toggleUI = val
+					lib:Notify({ Title = "Settings", Description = "UI toggle key saved — takes effect next launch.", Time = 3 })
+				end,
+			})
+		else
+			local fcName = kb.freecam  and kb.freecam.Name  or "G"
+			local uiName = kb.toggleUI and kb.toggleUI.Name or "RightControl"
+			bindBox:AddLabel("Freecam: " .. fcName .. "\nToggle UI: " .. uiName .. "\n\nEdit ARGUS/settings/keybinds.lua\nto change keybinds.", true)
+		end
 	else
 		bindBox:AddLabel("Keybinds are only configurable\nwhen running via the executor.", true)
 	end
