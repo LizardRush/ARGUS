@@ -11,7 +11,7 @@ UISystem.__index = UISystem
 
 -- ── Constructor ───────────────────────────────────────────────────────────────
 
-function UISystem.new(config, ai, controller, viz, human, obs, debugPanel, stateTable)
+function UISystem.new(config, ai, controller, viz, human, obs, debugPanel, stateTable, keybinds)
 	local self = setmetatable({}, UISystem)
 	self._cfg         = config
 	self._ai          = ai
@@ -21,6 +21,7 @@ function UISystem.new(config, ai, controller, viz, human, obs, debugPanel, state
 	self._obs         = obs
 	self._debug       = debugPanel
 	self._state       = stateTable
+	self._keybinds    = keybinds  -- may be nil in Studio context
 	self._lib         = nil
 	self._conn        = nil
 	self._updateTimer = 0
@@ -54,6 +55,7 @@ function UISystem:Initialize()
 		ShowCustomCursor = false,
 		Center           = true,
 		AutoShow         = true,
+		ToggleKey        = self._keybinds and self._keybinds.toggleUI or Enum.KeyCode.RightControl,
 	})
 
 	self:_buildNavigationTab(Window)
@@ -62,6 +64,7 @@ function UISystem:Initialize()
 	self:_buildObservationTab(Window)
 	self:_buildAITab(Window)
 	self:_buildDebugTab(Window)
+	self:_buildSettingsTab(Window)
 
 	self._conn = RunService.Heartbeat:Connect(function(dt)
 		self._updateTimer = self._updateTimer + dt
@@ -375,6 +378,71 @@ function UISystem:_refreshLiveTabs()
 			)
 		)
 	end
+end
+
+-- ── Tab: Settings ────────────────────────────────────────────────────────────
+
+function UISystem:_buildSettingsTab(window)
+	local lib = self._lib
+	local tab = window:AddTab("Settings", "sliders-horizontal")
+
+	-- Left: keybinds (executor-only; _keybinds is nil in Studio)
+	local bindBox = tab:AddLeftGroupbox("Keybinds")
+	if self._keybinds then
+		bindBox:AddKeybind("FreecamKey", {
+			Text     = "Freecam",
+			Default  = self._keybinds.freecam  or Enum.KeyCode.G,
+			Callback = function(val)
+				self._keybinds.freecam = val
+			end,
+		})
+		bindBox:AddKeybind("ToggleUIKey", {
+			Text     = "Toggle UI",
+			Default  = self._keybinds.toggleUI or Enum.KeyCode.RightControl,
+			Callback = function(val)
+				self._keybinds.toggleUI = val
+				lib:Notify({ Title = "Settings", Description = "UI toggle key saved — takes effect next launch.", Time = 3 })
+			end,
+		})
+	else
+		bindBox:AddLabel("Keybinds are only configurable\nwhen running via the executor.", true)
+	end
+
+	-- Right: misc
+	local miscBox = tab:AddRightGroupbox("Misc")
+	miscBox:AddSlider("FreecamSpeed", {
+		Text     = "Freecam Speed",
+		Default  = self._cfg.FreecamSpeed or 32,
+		Min      = 8,
+		Max      = 128,
+		Rounding = 0,
+		Suffix   = " st/s",
+		Callback = function(val)
+			self._cfg.FreecamSpeed = val
+		end,
+	})
+	miscBox:AddSlider("ScanRadius", {
+		Text     = "Scan Radius",
+		Default  = self._cfg.ScanRadius or 50,
+		Min      = 20,
+		Max      = 150,
+		Rounding = 0,
+		Suffix   = " st",
+		Callback = function(val)
+			self._cfg.ScanRadius = val
+		end,
+	})
+	miscBox:AddSlider("NodeSpacing", {
+		Text     = "Node Spacing",
+		Default  = self._cfg.NodeSpacing or 4,
+		Min      = 1,
+		Max      = 10,
+		Rounding = 1,
+		Suffix   = " st",
+		Callback = function(val)
+			self._cfg.NodeSpacing = val
+		end,
+	})
 end
 
 return UISystem
